@@ -3,7 +3,7 @@ Here are map screenshots that you can use for your CS2 related projects. The goa
 
 ## Want to add maps?
 1. Strictly images taken from inside of CS2 only.
-2. Your image must be in 16:9 ratio and 2560x1440px.
+2. Your image must be in 16:9 ratio and 1920x1080px.
 3. No hud included (cl_drawhud 0)
 4. Images must be in .jpg format
 5. Keep files under 1mb in filesize.
