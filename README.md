@@ -1,4 +1,4 @@
-# CS2 Map Images
+# Counter-Strike 2 Map Images
 Here are map screenshots that you can use for your CS2 related projects. The goal is to serve as a public high quality (but usable) repositry that anyone can use for their projects.
 
 ## Want to add maps?
