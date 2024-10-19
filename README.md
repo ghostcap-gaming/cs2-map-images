@@ -13,9 +13,7 @@ Here are map screenshots that you can use for your CS2 related projects. The goa
 
 ## FAQ
 **- Q. Why only 1920x1080?**
-
-**A.** Images like this are only really ever used in thumbnails or in designs where the image itself is not the focus.
+	**A.** Images like this are only really ever used in thumbnails or in designs where the image itself is not the focus.
 
 **- Q. Why 1MB?**
-
-**A.** This is to keep the collection at a manageable file size once there are thousands of images.
+	**A.** This is to keep the collection at a manageable file size once there are thousands of images.
