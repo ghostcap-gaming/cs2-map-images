@@ -1,4 +1,4 @@
-# GitHub Action: Collect attachments and open a PR in one step
+# GitHub Action: Collect attachments, rename by map name, open PR, and comment
 
 name: Issue Attachment Collector
 
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Collect attachments, commit, open PR, and comment
+      - name: Collect attachments, rename, commit, open PR, and comment
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -25,25 +25,39 @@ jobs:
             const https = require('https');
             const { execSync } = require('child_process');
 
-            // Determine payload and text
+            // Parse payload
             const payload     = context.payload.comment || context.payload.issue;
-            const body        = payload.body || '';
+            const body        = (payload.body || '') + '\n';
             const issueNumber = context.payload.issue.number;
             const targetDir   = 'cs2';
 
-            // Extract URLs of attachments
+            // Extract Map name
+            const mapMatch = body.match(/^Map:\s*(\S.*)$/m);
+            if (!mapMatch) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: issueNumber,
+                body: `⚠️ I couldn't find a \`Map: <name>\` field in the issue description. Please add it to rename your attachment.`
+              });
+              console.log('Map name missing; exiting.');
+              return;
+            }
+            const mapName = mapMatch[1].trim().replace(/[\\/\s]/g, '_');
+
+            // Extract attachments
             const urls = Array.from(body.matchAll(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g), m => m[1]);
             if (urls.length === 0) {
               console.log('No attachments found; exiting.');
               return;
             }
 
-            // Create a branch for this issue
+            // Create branch
             const branch = `issue-${issueNumber}-attachments`;
             execSync(`git checkout -b ${branch}`);
             fs.mkdirSync(targetDir, { recursive: true });
 
-            // Helper to download with redirect support
+            // Download utility
             async function download(url) {
               return new Promise((resolve, reject) => {
                 const parsed = new URL(url);
@@ -56,33 +70,36 @@ jobs:
                   res.on('data', c => chunks.push(c));
                   res.on('end', () => {
                     const buffer = Buffer.concat(chunks);
-                    let filename = path.basename(parsed.pathname);
-                    if (!path.extname(filename) && res.headers['content-type']) {
-                      const ext = res.headers['content-type'].split('/')[1].split(';')[0];
-                      if (ext) filename += `.${ext}`;
-                    }
-                    const filePath = path.join(targetDir, filename);
-                    fs.writeFileSync(filePath, buffer);
-                    console.log(`Saved ${filename} (${buffer.length} bytes)`);
-                    resolve(filename);
+                    let ext = '';
+                    const ctype = res.headers['content-type'] || '';
+                    const match = ctype.match(/image\/(\w+)/);
+                    if (match) ext = `.${match[1]}`;
+                    resolve({ buffer, ext });
                   });
                 }).on('error', reject);
               });
             }
 
-            // Download all
-            const saved = [];
-            for (const url of urls) {
+            // Download and rename
+            const savedNames = [];
+            for (let i = 0; i < urls.length; i++) {
+              const url = urls[i];
               console.log(`Downloading ${url}`);
-              const name = await download(url);
-              saved.push(name);
+              const { buffer, ext } = await download(url);
+              const name = urls.length === 1
+                ? `${mapName}${ext}`
+                : `${mapName}_${i+1}${ext}`;
+              const filePath = path.join(targetDir, name);
+              fs.writeFileSync(filePath, buffer);
+              console.log(`Saved ${name} (${buffer.length} bytes)`);
+              savedNames.push(name);
             }
 
-            // Commit and push
+            // Commit, push
             execSync('git config user.name "github-actions[bot]"');
             execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
             execSync(`git add ${targetDir}`);
-            execSync(`git commit -m "Add attachments from issue #${issueNumber}"`);
+            execSync(`git commit -m "Add ${savedNames.length} attachment(s) for map '${mapName}' from issue #${issueNumber}"`);
             execSync(`git push -u origin ${branch}`);
 
             // Create PR
@@ -91,14 +108,14 @@ jobs:
               repo:  context.repo.repo,
               head:  branch,
               base:  context.payload.repository.default_branch,
-              title: `Auto: Add attachments from issue #${issueNumber}`,
-              body:  `This PR adds ${saved.length} file(s) attached in issue #${issueNumber}.`
+              title: `Auto: Add ${savedNames.length} attachment(s) for map '${mapName}' (issue #${issueNumber})`,
+              body:  `This PR adds ${savedNames.length} attachment(s) renamed to **${mapName}** in **${targetDir}/** for issue #${issueNumber}.`
             });
 
-            // Comment back on issue
+            // Comment on issue
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo:  context.repo.repo,
               issue_number: issueNumber,
-              body: `✅ Collected ${saved.length} file(s) into **${targetDir}/** and opened PR #${pr.number}: ${pr.html_url}`
+              body: `✅ Collected and renamed ${savedNames.length} file(s) for map **${mapName}** into **${targetDir}/**, PR [#${pr.number}](${pr.html_url}).`
             });
