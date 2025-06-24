@@ -5,6 +5,9 @@ Here are map screenshots that you can use for your CS2-related projects. The goa
 You can add maps to this repository by creating an issue with the image attached.
 **You must also include `Map: mapname` in the issue description!**
 
+Play on **GhostCap servers** and want to receive **in-game store credits** for your contribution?
+Then also include a link to your **steamprofile** or your **steamid** in the issues description!
+
 ## Rules:
 1. Your image must be in **16:9** ratio and **1920x1080px**.
 2. No HUD included - make the image as clean as possible. **(`cl_drawhud 0` or `cl_draw_only_deathnotices 1`)**
