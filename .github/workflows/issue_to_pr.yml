@@ -5,8 +5,6 @@ name: Issue Attachment Collector
 on:
   issues:
     types: [opened]
-  issue_comment:
-    types: [created]
 
 jobs:
   collect-and-pr:
