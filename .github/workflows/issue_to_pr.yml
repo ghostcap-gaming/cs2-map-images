@@ -21,17 +21,20 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const core   = require('@actions/core');
-            const fs     = require('fs');
-            const path   = require('path');
-            const https  = require('https');
+            // Import core only once
+            const core = require('@actions/core');
+            const fs = require('fs');
+            const path = require('path');
+            const https = require('https');
             const { execSync } = require('child_process');
 
+            // Get issue/comment payload and text
             const payload     = context.payload.comment || context.payload.issue;
             const body        = payload.body;
             const issueNumber = context.payload.issue.number;
             const targetDir   = 'cs2';
 
+            // Regex for markdown attachments
             const urlPattern = /!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;
             let m, urls = [];
             while ((m = urlPattern.exec(body)) !== null) {
@@ -42,9 +45,14 @@ jobs:
               return;
             }
 
-            execSync(`git checkout -b issue-${issueNumber}-attachments`);
+            // Create a new branch for this issue
+            const branchName = `issue-${issueNumber}-attachments`;
+            execSync(`git checkout -b ${branchName}`);
+
+            // Ensure target directory exists
             fs.mkdirSync(targetDir, { recursive: true });
 
+            // Download each file, preserving extension
             const downloadFile = (url) => new Promise((resolve, reject) => {
               const urlObj   = new URL(url);
               let filename   = path.basename(urlObj.pathname);
@@ -58,7 +66,7 @@ jobs:
                 }
                 res.pipe(file);
                 file.on('finish', () => file.close(() => resolve(filename)));
-              }).on('error', (err) => reject(err));
+              }).on('error', reject);
             });
 
             (async () => {
@@ -67,16 +75,17 @@ jobs:
                 await downloadFile(url);
               }
 
+              // Commit, push, and open PR
               execSync('git config user.name "github-actions[bot]"');
               execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
               execSync(`git add ${targetDir}`);
               execSync(`git commit -m "Add attachments from issue #${issueNumber}"`);
-              execSync(`git push -u origin issue-${issueNumber}-attachments`);
+              execSync(`git push -u origin ${branchName}`);
 
               await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo:  context.repo.repo,
-                head:  `issue-${issueNumber}-attachments`,
+                head:  branchName,
                 base:  context.payload.repository.default_branch,
                 title: `Auto: Add attachments from issue #${issueNumber}`,
                 body:  `This PR adds the attached files from issue #${issueNumber}.`
@@ -88,10 +97,11 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const core = require('@actions/core');
             const issueNumber = context.payload.issue.number;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `✅ I've collected the attached files into \'cs2/\' and opened a PR: https://github.com/${context.repo.owner}/${context.repo.repo}/pulls`
+              body: `✅ I've collected the attached files into 'cs2/' and opened a PR: https://github.com/${context.repo.owner}/${context.repo.repo}/pulls`
             });
