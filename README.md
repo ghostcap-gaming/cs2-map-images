@@ -3,7 +3,7 @@ Here are map screenshots that you can use for your CS2-related projects. The goa
 
 ## Want to add maps?
 You can add maps to this repository by creating an issue with the image attached.
-**You must also include `Map: mapname` in the issue description!**
+**You must also include `Map: mapname` in the issue description! This must be exactly the same as the in-game map name!**
 
 Play on **GhostCap servers** and want to receive **in-game store credits** for your contribution?
 Then also include a link to your **steamprofile** or your **steamid** in the issues description!
