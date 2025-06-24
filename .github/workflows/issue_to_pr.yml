@@ -21,69 +21,65 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const path = require('path');
-            const https = require('https');
+            const core   = require('@actions/core');
+            const fs     = require('fs');
+            const path   = require('path');
+            const https  = require('https');
             const { execSync } = require('child_process');
 
-            // Get issue/comment payload and text
-            const payload = context.payload.comment || context.payload.issue;
-            const body = payload.body;
+            const payload     = context.payload.comment || context.payload.issue;
+            const body        = payload.body;
             const issueNumber = context.payload.issue.number;
+            const targetDir   = 'cs2';
 
-            // Hardcode target directory for all uploads
-            const targetDir = 'cs2';
-
-            // Regex for markdown attachments: ![alt](URL)
             const urlPattern = /!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;
             let m, urls = [];
             while ((m = urlPattern.exec(body)) !== null) {
               urls.push(m[1]);
             }
             if (urls.length === 0) {
-              core.info('No attachments found. Exiting.');
+              core.info('No attachments found; exiting.');
               return;
             }
 
-            // Create a new branch
-            const branchName = `issue-${issueNumber}-attachments`;
-            execSync(`git checkout -b ${branchName}`);
-
-            // Ensure target directory exists
+            execSync(`git checkout -b issue-${issueNumber}-attachments`);
             fs.mkdirSync(targetDir, { recursive: true });
 
-            // Download each attachment
             const downloadFile = (url) => new Promise((resolve, reject) => {
-              const filename = path.basename(new URL(url).pathname);
+              const urlObj   = new URL(url);
+              let filename   = path.basename(urlObj.pathname);
               const filepath = path.join(targetDir, filename);
-              const file = fs.createWriteStream(filepath);
-              https.get(url, (res) => {
+              const file     = fs.createWriteStream(filepath);
+
+              https.get(urlObj, (res) => {
+                if (!path.extname(filename) && res.headers['content-type']) {
+                  const mimeExt = res.headers['content-type'].split('/')[1];
+                  filename = filename + (mimeExt ? '.' + mimeExt : '');
+                }
                 res.pipe(file);
                 file.on('finish', () => file.close(() => resolve(filename)));
-              }).on('error', reject);
+              }).on('error', (err) => reject(err));
             });
 
             (async () => {
               for (const url of urls) {
-                core.info(`Downloading ${url}...`);
+                core.info(`Downloading ${url}…`);
                 await downloadFile(url);
               }
 
-              // Commit and push
               execSync('git config user.name "github-actions[bot]"');
               execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
               execSync(`git add ${targetDir}`);
               execSync(`git commit -m "Add attachments from issue #${issueNumber}"`);
-              execSync(`git push -u origin ${branchName}`);
+              execSync(`git push -u origin issue-${issueNumber}-attachments`);
 
-              // Open a PR
               await github.rest.pulls.create({
                 owner: context.repo.owner,
-                repo: context.repo.repo,
-                head: branchName,
-                base: context.payload.repository.default_branch,
+                repo:  context.repo.repo,
+                head:  `issue-${issueNumber}-attachments`,
+                base:  context.payload.repository.default_branch,
                 title: `Auto: Add attachments from issue #${issueNumber}`,
-                body: `This PR adds the attachment files from issue #${issueNumber}, collected automatically by workflow.`
+                body:  `This PR adds the attached files from issue #${issueNumber}.`
               });
             })();
 
