@@ -38,7 +38,7 @@ jobs:
                 owner: context.repo.owner,
                 repo:  context.repo.repo,
                 issue_number: issueNumber,
-                body: `⚠️ I couldn't find a \`Map: <name>\` field in the issue description. Please add it to rename your attachment.`
+                body: `⚠️ I couldn't find a \`Map: <name>\` field in the issue description. Please create a new issue with the correct message format!`
               });
               console.log('Map name missing; exiting.');
               return;
