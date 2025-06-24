@@ -21,20 +21,17 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Import core only once
             const core = require('@actions/core');
             const fs = require('fs');
             const path = require('path');
             const https = require('https');
             const { execSync } = require('child_process');
 
-            // Get issue/comment payload and text
             const payload     = context.payload.comment || context.payload.issue;
             const body        = payload.body;
             const issueNumber = context.payload.issue.number;
             const targetDir   = 'cs2';
 
-            // Regex for markdown attachments
             const urlPattern = /!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;
             let m, urls = [];
             while ((m = urlPattern.exec(body)) !== null) {
@@ -45,14 +42,10 @@ jobs:
               return;
             }
 
-            // Create a new branch for this issue
             const branchName = `issue-${issueNumber}-attachments`;
             execSync(`git checkout -b ${branchName}`);
-
-            // Ensure target directory exists
             fs.mkdirSync(targetDir, { recursive: true });
 
-            // Download each file, preserving extension
             const downloadFile = (url) => new Promise((resolve, reject) => {
               const urlObj   = new URL(url);
               let filename   = path.basename(urlObj.pathname);
@@ -75,7 +68,6 @@ jobs:
                 await downloadFile(url);
               }
 
-              // Commit, push, and open PR
               execSync('git config user.name "github-actions[bot]"');
               execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
               execSync(`git add ${targetDir}`);
@@ -97,11 +89,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const core = require('@actions/core');
             const issueNumber = context.payload.issue.number;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
-              repo: context.repo.repo,
+              repo:  context.repo.repo,
               issue_number: issueNumber,
-              body: `✅ I've collected the attached files into 'cs2/' and opened a PR: https://github.com/${context.repo.owner}/${context.repo.repo}/pulls`
+              body: `✅ Collected files in 'cs2/' and opened PR #${context.payload.issue.number}!` 
             });
