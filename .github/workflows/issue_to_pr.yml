@@ -117,5 +117,5 @@ jobs:
               owner: context.repo.owner,
               repo:  context.repo.repo,
               issue_number: issueNumber,
-              body: `✅ Collected and renamed ${savedNames.length} file(s) for map **${mapName}** into **${targetDir}/**, PR [#${pr.number}](${pr.html_url}).`
+              body: `✅ Created a PR for **${mapName}**, PR [#${pr.number}](${pr.html_url}).`
             });
