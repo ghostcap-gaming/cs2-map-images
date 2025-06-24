@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Collect and commit attachments
+        id: collector
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -28,19 +29,14 @@ jobs:
             const { execSync } = require('child_process');
 
             const payload     = context.payload.comment || context.payload.issue;
-            const body        = payload.body;
+            const body        = payload.body || '';
             const issueNumber = context.payload.issue.number;
             const targetDir   = 'cs2';
 
-            // Find Markdown attachment URLs
-            const urlPattern = /!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;
-            const urls = [];
-            let match;
-            while ((match = urlPattern.exec(body)) !== null) {
-              urls.push(match[1]);
-            }
+            // Extract Markdown image URLs
+            const urls = Array.from(body.matchAll(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g), m => m[1]);
             if (urls.length === 0) {
-              console.log('No attachments found; exiting workflow.');
+              console.log('No attachments found; exiting.');
               return;
             }
 
@@ -49,32 +45,41 @@ jobs:
             execSync(`git checkout -b ${branch}`);
             fs.mkdirSync(targetDir, { recursive: true });
 
-            // Download each URL fully into memory, then write to file
+            // Download with redirect support
             const downloadFile = (url) => new Promise((resolve, reject) => {
               const parsed = new URL(url);
-              let filename = path.basename(parsed.pathname);
-              const filepath = path.join(targetDir, filename);
+              const opts = { hostname: parsed.hostname, path: parsed.pathname + parsed.search, headers: { 'User-Agent': 'github-script' } };
 
-              https.get(parsed, (res) => {
+              const req = https.get(opts, res => {
+                // Follow redirects
+                if ([301,302,307,308].includes(res.statusCode) && res.headers.location) {
+                  return resolve(downloadFile(res.headers.location));
+                }
+
+                // Buffer chunks
                 const chunks = [];
-                res.on('data', (chunk) => chunks.push(chunk));
+                res.on('data', c => chunks.push(c));
                 res.on('end', () => {
                   const buffer = Buffer.concat(chunks);
-                  // if missing extension, infer from content-type
+                  let filename = path.basename(parsed.pathname);
+                  // Infer extension if missing
                   if (!path.extname(filename) && res.headers['content-type']) {
-                    const ext = res.headers['content-type'].split('/')[1];
+                    const ext = res.headers['content-type'].split('/')[1].split(';')[0];
                     filename += ext ? `.${ext}` : '';
                   }
+
                   fs.writeFileSync(path.join(targetDir, filename), buffer);
                   console.log(`Saved ${filename} (${buffer.length} bytes)`);
                   resolve(filename);
                 });
-              }).on('error', reject);
+              });
+
+              req.on('error', reject);
             });
 
             (async () => {
               for (const url of urls) {
-                console.log(`Downloading: ${url}`);
+                console.log(`Downloading ${url}`);
                 await downloadFile(url);
               }
 
@@ -85,26 +90,31 @@ jobs:
               execSync(`git commit -m "Add attachments from issue #${issueNumber}"`);
               execSync(`git push -u origin ${branch}`);
 
-              // Open PR
-              await github.rest.pulls.create({
-                owner: context.repo.owner,
-                repo:  context.repo.repo,
-                head:  branch,
-                base:  context.payload.repository.default_branch,
-                title: `Auto: Add attachments from issue #${issueNumber}`,
-                body:  `This PR adds the attachment files from issue #${issueNumber}.`
-              });
+              // Set output for next step
+              return { pr_branch: branch, count: urls.length };
             })();
 
-      - name: Comment on Issue
+      - name: Open PR and comment
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const num = context.payload.issue.number;
+            // Retrieve output from collector step
+            const { pr_branch, count } = steps.collector.outputs;
+            // Create PR
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              head:  pr_branch,
+              base:  context.payload.repository.default_branch,
+              title: `Auto: Add attachments from issue #${context.payload.issue.number}`,
+              body:  `This PR adds ${count} file(s) attached in issue #${context.payload.issue.number}.`
+            });
+
+            // Comment on the issue
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo:  context.repo.repo,
-              issue_number: num,
-              body: `✅ Collected ${urls.length} file(s) into **cs2/** – see PR #${num}-attachments!`
+              issue_number: context.payload.issue.number,
+              body: `✅ Collected ${count} attachment(s) into **cs2/** and opened [PR #${pr.number}](${pr.html_url})!`
             });
