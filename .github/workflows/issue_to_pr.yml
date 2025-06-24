@@ -1,0 +1,101 @@
+# GitHub Action: Automatically collect attachments from new issues/comments,
+# commit them into a branch, and open a Pull Request
+
+name: Issue Attachment Collector
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  collect-attachments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Collect and commit attachments
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const https = require('https');
+            const { execSync } = require('child_process');
+
+            // Get issue/comment payload and text
+            const payload = context.payload.comment || context.payload.issue;
+            const body = payload.body;
+            const issueNumber = context.payload.issue.number;
+
+            // Hardcode target directory for all uploads
+            const targetDir = 'cs2';
+
+            // Regex for markdown attachments: ![alt](URL)
+            const urlPattern = /!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;
+            let m, urls = [];
+            while ((m = urlPattern.exec(body)) !== null) {
+              urls.push(m[1]);
+            }
+            if (urls.length === 0) {
+              core.info('No attachments found. Exiting.');
+              return;
+            }
+
+            // Create a new branch
+            const branchName = `issue-${issueNumber}-attachments`;
+            execSync(`git checkout -b ${branchName}`);
+
+            // Ensure target directory exists
+            fs.mkdirSync(targetDir, { recursive: true });
+
+            // Download each attachment
+            const downloadFile = (url) => new Promise((resolve, reject) => {
+              const filename = path.basename(new URL(url).pathname);
+              const filepath = path.join(targetDir, filename);
+              const file = fs.createWriteStream(filepath);
+              https.get(url, (res) => {
+                res.pipe(file);
+                file.on('finish', () => file.close(() => resolve(filename)));
+              }).on('error', reject);
+            });
+
+            (async () => {
+              for (const url of urls) {
+                core.info(`Downloading ${url}...`);
+                await downloadFile(url);
+              }
+
+              // Commit and push
+              execSync('git config user.name "github-actions[bot]"');
+              execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
+              execSync(`git add ${targetDir}`);
+              execSync(`git commit -m "Add attachments from issue #${issueNumber}"`);
+              execSync(`git push -u origin ${branchName}`);
+
+              // Open a PR
+              await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head: branchName,
+                base: context.payload.repository.default_branch,
+                title: `Auto: Add attachments from issue #${issueNumber}`,
+                body: `This PR adds the attachment files from issue #${issueNumber}, collected automatically by workflow.`
+              });
+            })();
+
+      - name: Comment on Issue/PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = context.payload.issue.number;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `✅ I've collected the attached files into \'cs2/\' and opened a PR: https://github.com/${context.repo.owner}/${context.repo.repo}/pulls`
+            });
