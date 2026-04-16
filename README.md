@@ -9,7 +9,7 @@ Play on **GhostCap servers** and want to receive **in-game store credits** for y
 Then also include a link to your **steamprofile** or your **steamid** in the issues description!
 
 ## Rules:
-1. Your image must be in **16:9** ratio and **1920x1080px**.
+1. Your image must have a **16:9** aspect ratio and a maximum size of **1920 x 1080**.
 2. No HUD included - make the image as clean as possible. **(`cl_drawhud 0` or `cl_draw_only_deathnotices 1`)**
 3. Remove CS2 build information. **(`r_show_build_info 0`)**
 4. Images must be in **`.png`** format.
@@ -17,9 +17,9 @@ Then also include a link to your **steamprofile** or your **steamid** in the iss
 6. No logos or URLs in the images.
 
 ## FAQ
-**- Q. Why only 1920x1080?**
+**- Q: Why a maximum of 1920 x 1080?**
 
-**A.** Images like this are only really ever used in thumbnails or in designs where the image itself is not the focus.
+**A:** Images like that are only used in thumbnails or in designs where the image itself is not the focus.
 
 **- Q. Why 1MB?**
 
